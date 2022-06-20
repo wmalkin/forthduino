@@ -410,6 +410,16 @@ void op_runfile()
 
 
 
+bool cmd_echo = true;
+
+
+void op_echo()
+{
+  int v = forth_stack()->popint();
+  cmd_echo = (v != 0);
+}
+
+
 char serinput[1024];
 int serlen = 0;
 
@@ -420,6 +430,10 @@ bool CheckSerial()
     int b = Serial.read();
     if (b == 10 || b == 13) {
       serinput[serlen] = 0;
+      if (cmd_echo) {
+        Serial.print("serial>");
+        Serial.println(serinput);
+      }
       forth_run(serinput);
       serlen = 0;
     } else {
@@ -477,6 +491,10 @@ void CheckUDP()
           udp_open_file.write(content, strlen(content));
           udp_open_file.write("\n", 1);
         } else {
+          if (cmd_echo) {
+            Serial.print("udp>");
+            Serial.println(content);
+          }
           forth_run(content);
         }
       }
@@ -488,34 +506,6 @@ void CheckUDP()
   }
 }
 
-
-bool processContent = false;
-
-void readBootstrap()
-{
-    int len = client.available();
-    if (len > 0) {
-        byte buffer[80];
-        if (len > 80) len = 80;
-        client.read(buffer, len);
-        for (int i = 0; i < len; i++) {
-            if (buffer[i] == 10) {
-                if (pbofs == 0) {
-                    processContent = true;
-                } else {
-                    packetBuffer[pbofs] = 0;
-                    if (processContent)
-                        forth_run(packetBuffer);
-                    pbofs = 0;
-                }
-            } else {
-                if (buffer[i] != 13)
-                    packetBuffer[pbofs++] = buffer[i];
-            }
-        }
-        byteCount = byteCount + len;
-    }
-}
 
 // [ [  '**** quad:str ] #70 #73 loop ] 0 3 loop
 void op_quad_char()
@@ -576,8 +566,6 @@ void op_quad_blank()
 }
 
 
-bool reported = false;
-
 void forthduino_setup()
 {
   sd.begin(SD_CONFIG);
@@ -587,6 +575,8 @@ void forthduino_setup()
   // define custom forth words to interact with the Arduino environment
   forth_dict()->def("udp:init", &load_inet);
 
+  forth_dict()->def("cmd:echo", &op_echo);
+  
   forth_dict()->def("rndm", &opRndm);
   forth_dict()->def("rrndm", &opRRndm);
   forth_dict()->def(".", &dot);
@@ -634,27 +624,6 @@ void loop_check(Value* task)
 
 void forthduino_loop()
 {
-//  if (!reported) {
-//      readBootstrap();
-//      
-//      // if the server's disconnected, stop the client:
-//      if (!client.connected() && !reported) {
-//          reported = true;
-//          endMicros = micros();
-//          client.stop();
-//          Serial.print("Received ");
-//          Serial.print(byteCount);
-//          Serial.print(" bytes in ");
-//          float seconds = (float)(endMicros - beginMicros) / 1000000.0;
-//          Serial.print(seconds, 4);
-//          float rate = (float)byteCount / seconds / 1000.0;
-//          Serial.print(", rate = ");
-//          Serial.print(rate);
-//          Serial.print(" kbytes/second");
-//          Serial.println();
-//      }
-//  }
-  
   while (CheckSerial()) {};
   CheckUDP();
   
