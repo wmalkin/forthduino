@@ -794,11 +794,29 @@ The three words `udp:begin`, `udp:.`, and `udp:end`, are used together to form a
 
 ## Arduino Loop
 
-
+Arduino devices have standard "setup" and "loop" functions. The following calls are implemented in the Arduino loop to allow Forth sequences to be executed on a schedule. This can be used to, for example, render the next frame of an animation.
 
 ### loop:def
 
+Defines a sequence to be executed on the Arduino loop.
+
+```
+[ [ map:ping-animate ] 20.0 0.0 ] 'maploop loop:def
+```
+
+This sets up a call to `map:ping-animate` every 20 milliseconds, maximum. The actual execution may be delayed if the function has a long execution time, or other things are also happening in between scheduled calls.
+
+`loop:def` expects two arguments. The first is a sequence that is a data structure of three elements. The second argument is a string used to name this defined loop behaviour so it can be removed later with `loop:forget`.
+
+The sequence / data structure consists of three elements. The first is another sequence that is the actual target to be executed periodically. The second is the desired minimum delay in milliseconds between calls. The third is a placeholder number that is used internally to hold a tick count for the next scheduled call.
+
+Both of the millisecond values are given as floats, so don't forget the `.0` part. Floats are used because int is usually not wide enough to contain the tick count. It is important to reserve floats in the initial declaration of this structure.
+
 ### loop:forget
+
+This removes an existing defined loop sequence. Redefining an existing sequence will implicitly forget the old one.
+
+An idiosyncracy of this Forth is that forgotten loop definitions will leak a small amount of memory, so it is not advisable to constantly define loop sequences. They should be defined once only.
 
 ## SD Card
 
