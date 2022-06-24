@@ -1267,6 +1267,54 @@ void op_tan()
 }
 
 
+double oper_dbl_asin(double a)
+{
+  return asin(a);
+}
+
+int oper_asin(int a)
+{
+  return (int)(oper_dbl_asin(a));
+}
+
+void op_asin()
+{
+  unary(&oper_asin, &oper_dbl_asin);
+}
+
+
+double oper_dbl_acos(double a)
+{
+  return acos(a);
+}
+
+int oper_acos(int a)
+{
+  return (int)(oper_dbl_acos(a));
+}
+
+void op_acos()
+{
+  unary(&oper_acos, &oper_dbl_acos);
+}
+
+
+double oper_dbl_atan(double a)
+{
+  return atan(a);
+}
+
+int oper_atan(int a)
+{
+  return (int)(oper_dbl_atan(a));
+}
+
+void op_atan()
+{
+  unary(&oper_atan, &oper_dbl_atan);
+}
+
+
 double oper_dbl_pow(double a, double b)
 {
   return pow(a, b);
@@ -1575,19 +1623,6 @@ void op_identity()
     if (v->vtype == ARRAY)
         for (int i = 0; i < v->len; i++)
             v->ia[i] = i;
-}
-
-
-void op_index()
-{
-    Value* idxarray = vstk->pop();
-    Value* indices = vstk->pop();
-    if (indices->vtype == ARRAY) {
-        //for (int i = 0; i < indices->len; i++)
-            
-    }
-    vstk->push(indices);
-    vfree(idxarray);
 }
 
 
@@ -2145,7 +2180,8 @@ void op_varget()
 
 void op_step()
 {
-    step_on = true;
+    int ison = vstk->popint();
+    step_on = (ison != 0);
 }
 
 
@@ -2232,6 +2268,9 @@ void defineBuiltins ()
   dict->def("sin", &op_sin);
   dict->def("cos", &op_cos);
   dict->def("tan", &op_tan);
+  dict->def("asin", &op_asin);
+  dict->def("acos", &op_acos);
+  dict->def("atan", &op_atan);
   dict->def("deg", &op_deg);
   dict->def("rad", &op_rad);
   dict->def("pow", &op_pow);
@@ -2276,7 +2315,6 @@ void defineBuiltins ()
   dict->def("sum", &op_sum);
   dict->def("array", &op_array);
   dict->def("identity", &op_identity);
-  dict->def("index", &op_index);
   dict->def("geta", &op_geta);
   dict->def("puta", &op_puta);
   dict->def("dgeta", &op_dgeta);

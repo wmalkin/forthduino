@@ -576,7 +576,7 @@ void forthduino_setup()
   forth_dict()->def("udp:init", &load_inet);
 
   forth_dict()->def("cmd:echo", &op_echo);
-  
+
   forth_dict()->def("rndm", &opRndm);
   forth_dict()->def("rrndm", &opRRndm);
   forth_dict()->def(".", &dot);
@@ -586,18 +586,18 @@ void forthduino_setup()
   forth_dict()->def("delay", &op_delay);
   forth_dict()->def("delayus", &op_delay_us);
   forth_dict()->def("now", &op_now);
-  forth_dict()->def("pinmode", &op_pinmode);
-  forth_dict()->def("digitalread", &op_digitalread);
-  forth_dict()->def("digitalwrite", &op_digitalwrite);
-  forth_dict()->def("analogread", &op_analogread);
-  forth_dict()->def("analogreference", &op_analogreference);
-  forth_dict()->def("analogwrite", &op_analogwrite);
-  forth_dict()->def("udp-begin", &op_udp_begin);
-  forth_dict()->def(".udp", &op_udp_prt);
-  forth_dict()->def("udp-end", &op_udp_end);
-  forth_dict()->def("loop-def", &op_loopdef);
-  forth_dict()->def("loop-forget", &op_loopforget);
-  forth_dict()->def("run-file", &op_runfile);
+  forth_dict()->def("pin:mode", &op_pinmode);
+  forth_dict()->def("pin:dread", &op_digitalread);
+  forth_dict()->def("pin:dwrite", &op_digitalwrite);
+  forth_dict()->def("pin:aread", &op_analogread);
+  forth_dict()->def("pin:aref", &op_analogreference);
+  forth_dict()->def("pin:awrite", &op_analogwrite);
+  forth_dict()->def("udp:begin", &op_udp_begin);
+  forth_dict()->def("udp:.", &op_udp_prt);
+  forth_dict()->def("udp:end", &op_udp_end);
+  forth_dict()->def("loop:def", &op_loopdef);
+  forth_dict()->def("loop:forget", &op_loopforget);
+  forth_dict()->def("file:run", &op_runfile);
 
   Serial.begin(9600);
   Serial.println("serial started");
