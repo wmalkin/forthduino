@@ -6,7 +6,7 @@
 #include <string.h>
 
 #include "forth.h"
-#include "octo.h"
+#include "led.h"
 
 #define FONT_CHAR_HEIGHT 7
 #define FONT_CHAR_WIDTH 5
@@ -283,9 +283,9 @@ void charColAt(int basecol, int col, int c, int fg, int bg)
 		else
 			p = (basecol + col) * 8 + 7 - row;
 		if (FONT_BIT(c, col, row))
-			octo_put(p, fg);
+			led_put(0, p, fg);
 		else
-			octo_put(p, bg);
+			led_put(0, p, bg);
 	}
 }
 
@@ -293,7 +293,7 @@ void clearCol(int basecol, int col, int bg)
 {
 	for (int row = 0; row < 8; row++) {
 		int p = (basecol + col) * 8 + row;
-		octo_put(p, bg);
+		led_put(0, p, bg);
 	}
 }
 

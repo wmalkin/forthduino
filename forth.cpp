@@ -919,14 +919,14 @@ void binary(int(*oper)(int,int), double(*dbl_oper)(double,double))
 }
 
 
-void trinary(int(*oper)(int,int,int), double(*dbl_oper)(double,double,double))
+void ternary(int(*oper)(int,int,int), double(*dbl_oper)(double,double,double))
 {
   Value *c = vstk->pop();
   Value *b = vstk->pop();
   Value *a = vstk->pop();
   
   // test if we should use int oper or double dbl_oper
-  // always use double version unless both input operands are INT or ARRAY.
+  // always use double version unless all input operands are INT or ARRAY.
   bool usefloat = (dbl_oper != NULL) && !((a->vtype == ARRAY || a->vtype == INT) && (b->vtype == ARRAY || b->vtype == INT) && (c->vtype == ARRAY || c->vtype == INT));
 
   // test if we need to iterate and return an array (at least one input operand is an ARRAY)
@@ -935,8 +935,7 @@ void trinary(int(*oper)(int,int,int), double(*dbl_oper)(double,double,double))
     int la = a->vtype == ARRAY ? a->len : 1;
     int lb = b->vtype == ARRAY ? b->len : 1;
     int lc = c->vtype == ARRAY ? c->len : 1;
-    int len = la > lb ? la : lb;
-    len = lc > len ? lc : len;
+    int len = max(la, max(lb, lc));
 
     // create result array
     int* rs = new int[len];
@@ -1127,7 +1126,7 @@ int oper_constrain(int a, int b, int c)
 
 void op_constrain()
 {
-  trinary(&oper_constrain, &oper_dbl_constrain);
+  ternary(&oper_constrain, &oper_dbl_constrain);
 }
 
 
@@ -1879,155 +1878,6 @@ void op_call()
 }
 
 
-int max (int a, int b)
-{
-  return a < b ? b : a;
-}
-
-
-int min (int a, int b)
-{
-  return a > b ? b : a;
-}
-
-
-struct LRGB {
-    int r;
-    int g;
-    int b;
-};
-
-struct LHSV {
-    int h;
-    int s;
-    int v;
-};
-
-
-int RGBFORMAT = 0;
-
-
-void op_rgbformat() {
-  RGBFORMAT = vstk->popint();
-}
-
-
-int rgbpack(LRGB* rgb)
-{
-  switch(RGBFORMAT) {
-    case 0: //rgb
-    default:
-      return (rgb->r & 0xff) << 16 | (rgb->g & 0xff) << 8 | (rgb->b & 0xff);
-    case 1: //grb
-      return (rgb->g & 0xff) << 16 | (rgb->r & 0xff) << 8 | (rgb->b & 0xff);
-    case 2: //bgr
-      return (rgb->b & 0xff) << 16 | (rgb->g & 0xff) << 8 | (rgb->r & 0xff);
-    case 3: //gbr
-      return (rgb->g & 0xff) << 16 | (rgb->b & 0xff) << 8 | (rgb->r & 0xff);
-    case 4: //rbg
-      return (rgb->r & 0xff) << 16 | (rgb->b & 0xff) << 8 | (rgb->g & 0xff);
-    case 5: //brg
-      return (rgb->b & 0xff) << 16 | (rgb->r & 0xff) << 8 | (rgb->g & 0xff);
-  }
-}
-
-
-void rgbunpack(int c, LRGB* rgb)
-{
-  switch(RGBFORMAT) {
-    case 0:
-      rgb->r = (c & 0xff0000) >> 16;
-      rgb->g = (c & 0x00ff00) >> 8;
-      rgb->b = c & 0x0000ff;
-      break;
-    case 1:
-      rgb->g = (c & 0xff0000) >> 16;
-      rgb->r = (c & 0x00ff00) >> 8;
-      rgb->b = c & 0x0000ff;
-      break;
-    case 2:
-      rgb->b = (c & 0xff0000) >> 16;
-      rgb->g = (c & 0x00ff00) >> 8;
-      rgb->r = c & 0x0000ff;
-      break;
-    case 3:
-      rgb->g = (c & 0xff0000) >> 16;
-      rgb->b = (c & 0x00ff00) >> 8;
-      rgb->r = c & 0x0000ff;
-      break;
-    case 4:
-      rgb->r = (c & 0xff0000) >> 16;
-      rgb->b = (c & 0x00ff00) >> 8;
-      rgb->g = c & 0x0000ff;
-      break;
-    case 5:
-      rgb->b = (c & 0xff0000) >> 16;
-      rgb->r = (c & 0x00ff00) >> 8;
-      rgb->g = c & 0x0000ff;
-      break;
-  }
-}
-
-
-unsigned int h2rgb(unsigned int v1, unsigned int v2, unsigned int hue)
-{
-    if (hue < 60)
-        return v1 * 60 + (v2 - v1) * hue;
-    if (hue < 180)
-        return v2 * 60;
-    if (hue < 240)
-        return v1 * 60 + (v2 - v1) * (240 - hue);
-    return v1 * 60;
-}
-
-
-int makeColor(unsigned int hue, unsigned int saturation, unsigned int lightness)
-{
-    unsigned int red, green, blue;
-    unsigned int var1, var2;
-
-    if (hue > 359) hue = hue % 360;
-    if (saturation > 100) saturation = 100;
-    if (lightness > 100) lightness = 100;
-
-    // algorithm from: http://www.easyrgb.com/index.php?X=MATH&H=19#text19
-    if (saturation == 0) {
-        red = green = blue = lightness * 255 / 100;
-    } else {
-        if (lightness < 50) {
-            var2 = lightness * (100 + saturation);
-        } else {
-            var2 = ((lightness + saturation) * 100) - (saturation * lightness);
-        }
-        var1 = lightness * 200 - var2;
-        red = h2rgb(var1, var2, (hue < 240) ? hue + 120 : hue - 240) * 255 / 600000;
-        green = h2rgb(var1, var2, hue) * 255 / 600000;
-        blue = h2rgb(var1, var2, (hue >= 120) ? hue - 120 : hue + 240) * 255 / 600000;
-    }
-    LRGB rgb;
-    rgb.r = red;
-    rgb.g = green;
-    rgb.b = blue;
-    return rgbpack(&rgb);
-    // return (red << 16) | (green << 8) | blue;
-}
-
-
-int oper_hsvr(int h, int s, int v)
-{
-  CHSV hsv;
-  CRGB rgb;
-  LRGB srgb;
-  hsv.val = max(min(((v * 255) / 100) % 256, 255), 0);
-  hsv.sat = max(min(((s * 255) / 100) % 256, 255), 0);
-  hsv.hue = max(min(((h * 255) / 360) % 256, 255), 0);
-  hsv2rgb_rainbow(hsv, rgb);
-  srgb.r = rgb.red;
-  srgb.g = rgb.green;
-  srgb.b = rgb.blue;
-  return rgbpack(&srgb);
-}
-
 int __elementAt(Value* v, int i)
 {
     switch(v->vtype) {
@@ -2042,87 +1892,6 @@ int __elementAt(Value* v, int i)
           return (int)v->fnum;
       default:
           return 0;
-    }
-}
-
-void op_hsvr()
-{
-  trinary(&oper_hsvr, NULL);
-}
-
-
-int oper_hsv(int h, int s, int v)
-{
-  return makeColor(h, s, v);
-}
-
-void op_hsv()
-{
-  trinary(&oper_hsv, NULL);
-}
-
-
-void rgbblend(LRGB* a, LRGB* b, int ratio, LRGB* rs)
-{
-    rs->r = ((b->r * ratio) + (a->r * (100-ratio))) / 100;
-    rs->g = ((b->g * ratio) + (a->g * (100-ratio))) / 100;
-    rs->b = ((b->b * ratio) + (a->b * (100-ratio))) / 100;
-}
-
-
-int cblend(int a, int b, int ratio)
-{
-    LRGB rgba;
-    LRGB rgbb;
-    rgbunpack(a, &rgba);
-    rgbunpack(b, &rgbb);
-    rgbblend(&rgba, &rgbb, ratio, &rgba);
-    return rgbpack(&rgba);
-}
-
-void op_rgbToColor ()
-{
-    LRGB rgb;
-    rgb.b = vstk->popint();
-    rgb.g = vstk->popint();
-    rgb.r = vstk->popint();
-    vstk->push(rgbpack(&rgb));
-}
-
-
-void op_colorToRgb ()
-{
-    LRGB rgb;
-    int c = vstk->popint();
-    rgbunpack(c, &rgb);
-    vstk->push(rgb.r);
-    vstk->push(rgb.g);
-    vstk->push(rgb.b);
-}
-
-
-void op_rgb_blend()
-{
-    int ratio = vstk->popint();
-    int b = vstk->popint();
-    int a = vstk->popint();
-    vstk->push(cblend(a, b, ratio));
-}
-
-
-void op_argb_blend()
-{
-    int ratio = vstk->popint();
-    Value* vb = vstk->pop();
-    Value* va = vstk->pop();
-    if (va->vtype == ARRAY && vb->vtype == ARRAY && va->len == vb->len) {
-        for (int i = 0; i < va->len; i++)
-            va->ia[i] = cblend(va->ia[i], vb->ia[i], ratio);
-        vstk->push(va);
-        vfree(vb);
-    } else {
-        vfree(va);
-        vfree(vb);
     }
 }
 
@@ -2251,6 +2020,27 @@ void op_free_sram()
 }
 
 
+bool cmd_echo = true;
+
+
+void op_echo()
+{
+  int v = forth_stack()->popint();
+  cmd_echo = (v != 0);
+}
+
+
+bool forth_getecho()
+{
+    return cmd_echo;
+}
+
+
+void forth_setecho(bool echo)
+{
+    cmd_echo = echo;
+}
+
 //
 // register built-in words
 //
@@ -2338,14 +2128,6 @@ void defineBuiltins ()
   dict->def("repeat", &op_repeat);
   dict->def("call", &op_call);
 
-  dict->def("rgbformat", &op_rgbformat);
-  dict->def("rgb>", &op_rgbToColor);
-  dict->def(">rgb", &op_colorToRgb);
-  dict->def("hsv>", &op_hsv);
-  dict->def("hsvr>", &op_hsvr);
-  dict->def("blend", &op_rgb_blend);
-  dict->def("ablend", &op_argb_blend);
-
   dict->def("def", &op_def);
   dict->def("redef", &op_redef);
   dict->def("forget", &op_forget);
@@ -2363,6 +2145,8 @@ void defineBuiltins ()
   dict->def("mem:amalloc", &op_mem_amalloc);
   dict->def("mem:afree", &op_mem_afreed);
   dict->def("mem:sram", &op_free_sram);
+
+  dict->def("cmd:echo", &op_echo);
 }
 
 

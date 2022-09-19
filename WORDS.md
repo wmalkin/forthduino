@@ -1,18 +1,26 @@
-# Forth Built-In Words
+# Forthduino
 
-Here you will find a list of the built-in words that are part of the "forthduino" project, along with selected discussions of the Forth language and its implementation here. This list of words includes the expected primitives, control structures, and so on. It also includes words that support the specific WS2812 interfaces and other Arduino-specific capabilities.
+Forthduino is a project conceived as an intelligent controller of WS2812 and similar LEDs, running on the very capable Teensy 4.1. The excellent FastLED library is used to carry out color management and LED control. This allows a variety of LED types to be attached to individual pins, or to be controlled in parallel using the OctoWS2812 board. This last combination is easy to connect to large numbers of LEDs, it renders at 8x by driving eight sections of LEDs simultaneously, and it presents a simple linear array of color values.
+
+The Teensy 4.1 also has a good amount of RAM and a fast processor, which allows complex renderings to be created at a high frame rate. This library could easily be adapted to other Arduino devices and other LED driving strategies, but the combination described is excellent and easy to work with.
+
+One last feature of the Teensy 4.1 is onboard EtherNet using an inexpensive additional component. All of the components needed are available for order at www.pjrc.com.
+
+In this document you will find a list of the built-in words that are part of the "forthduino" project, along with selected discussions of the Forth language and its implementation here. This list of words includes the expected primitives, control structures, and so on. It also includes words that support the specific LED interfaces and other Arduino-specific capabilities, making this an excellent basis for network-attached sensors and displays.
 
 ## What Are Words?
 
-In Forth, symbols that are bound to a variable or a sequence of instructions (corresponding to functions) are called 'words'. The language consists of a continuous series of whitespace-separated values (literals) and words. A Forth parser need only break up an input string on 'space' and process each of the resulting tokens. If a token matches a defined word, then process the bound value of that word. Otherwise it must be a literal.
+In Forth, words are symbols that are bound to a piece of C code, a variable, or a sequence of instructions (corresponding to functions). The language consists of a continuous series of whitespace-separated words. A Forth parser need only break up an input string on whitespace and process each of the resulting words. If an input word matches a bound word, then process the bound value of that word. Otherwise it must be a literal.
 
 ## Execution Stack
 
-Forth has a single execution stack where computations are carried out. When a literal value is encountered, it is pushed onto the execution stack. When a built-in word is encountered, it is called. The code for any word expects arguments on the execution stack, which it pops off as needed, and it is expected to push any result back onto the stack.
+Forth has a single execution stack where computations are carried out. When a literal value is encountered, it is pushed onto the execution stack. When a built-in word is encountered, it's C implementation is called. The code for any word expects arguments on the execution stack, which it pops off as needed, and it is expected to push any result back onto the stack.
 
 This approach means that words cannot vary their behaviour based on the number of inputs, unless a convention is adopted of pushing the number of arguments as the last argument. For example, a theoretical 'average' word could accept any number of numeric arguments followed by a count of the number of arguments. It could then pop the count, sum that count of arguments, divide, and push the result.
 
-In this implementation, I have avoided this convention and generally stuck to fixed arguments for all built-in words. There is nothing preventing the introduction of new words that process variable numbers of arguments in this way. Also read below about arrays and how they are processed.
+In this implementation, I have avoided this convention and generally stuck to fixed arguments for all built-in words. There is nothing preventing the introduction of new words that process variable numbers of arguments in this way.
+
+In LED functions such as calculating color values, value is found in applying an algorithm to each LED in a string. For this reason, arrays of integer and implicit array behaviour was introduced.
 
 ## Data Types
 
@@ -20,25 +28,29 @@ A minimal Forth implementation is typically very tiny and only operates on integ
 
 This implementation is a little richer, and has the following built-in data types:
 
-	int
-	float
-	string
-	int array
-	sequence
+* int
+* float
+* string
+* int array
+* sequence
 
-There are additional data types for symbol, function, and free list management, but they are not really directly visible.
+There are additional internal data types for symbol, function, and free list management.
 
-An int is any integer. A float is a number with a decimal place. A string is a sequence of characters prefixed by a single quote ' sigil. Forth uses white space as a word delimiter, so strings cannot contain white space, and there is no support for strings that would contain white space (this could be introduced later). This Forth is designed to manipulate numeric values into colors to animate RGB LED strings, so string processing is not really a core requirement. (note: the alpha LED message board functions introduce this need so more complete string processing might be introduced soon)
+An int is any integer. A float is a number with a decimal place. A string is a sequence of characters prefixed by a single quote ' sigil. Forth uses white space as a word delimiter, so strings cannot contain white space, and there is no support for strings that would contain white space (this could be introduced later). This Forth is designed to manipulate numeric values into colors to animate RGB LED strings, so string processing is not really a core requirement. (note: the alpha LED message board functions introduce this need so more complete string processing might be added soon).
 
-An int array is a fixed array of integers. These arrays can be used to hold color values (for example hue, saturation, and value; or red, green, blue; or packed RGB values). This would typically be used to compute whole arrays of color values matching a whole LED string. Most operators are enhanced to process arrays by applying themselves to each element of the input arrays in turn, so this kind of color processing can be very fast and easy.
+An int array is a fixed array of integers. These arrays can be used to hold color values (for example hue, saturation, and value; or red, green, blue; or packed RGB values). This would typically be used to compute whole arrays of color values matching a whole LED string. Most of the built-in operators have been enhanced to process arrays by applying themselves to each element of the input arrays in turn and generally returning an array result, so this kind of color processing can be very fast and easy.
 
-Finally, a sequence is a bunch of words representing either the body of a function or a code fragment that is to be executed conditionally or repeatedly. A sequence can be declared as follows:
+Finally, a sequence is a bunch of words representing either the body of a function or a code fragment to be executed conditionally or repeatedly. A sequence can be declared as follows:
 
 ```
 [ 5 + . ] 0 10 loop cr
 ```
 
-This defines a sequence that adds 5 to an input argument, and then prints it. The sequence is executed 10 times by 'loop', with arguments 0..9 in turn.
+The sequence is the portion `5 + .` that is enclosed by brackets. Note the white space surrounding each token, including the brackets. The opening and closing bracket are not delimiters, they are words. The left bracket `[` causes the following words to be collected into a sequence data structure. The right bracket `]` causes the collected sequence of words to be closed and then pushed onto the execution stack as a value of type sequence.
+
+This defines a sequence that adds 5 to an input argument, and then prints it. The sequence is executed 10 times by 'loop', with arguments 0..9 in turn. This results in the following output being printed to the serial port:
+
+`prints> 5 6 7 8 9 10 11 12 13 14 \n`
 
 ## Stash Stack
 
@@ -51,7 +63,20 @@ For example, the following word definition takes the product of three separate s
 	+ >>> + >>> + <<< * <<< * ;
 ```
 
-Note that '>>>' moves the top of execution stack to the stash stack, and '<<<' does the reverse.
+| Execution | Execution Stack (after - TOS on right) | Stash Stack |
+| ----- | ----- | ----- |
+| (input arguments) | 1 2 3 4 5 6 | |
+| + | 1 2 3 4 11 | |
+| >>> | 1 2 3 4 | 11 |
+| + | 1 2 7 | 11 |
+| >>> | 1 2 | 11 7 |
+| + | 3 | 11 7 |
+| <<< | 3 7 | 11 |
+| * | 21 | 11 |
+| <<< | 21 11 | |
+| * | 231 | |
+
+Note that '>>>' moves the top of execution stack to the stash stack, and '<<<' does the reverse. See below for more about the `:` sigil and the `;` word, used to define a sequence and bind it to a global variable.
 
 ## Global Dictionary
 
@@ -63,13 +88,13 @@ Words can be defined (`def`) and forgotten (`forget`).
 
 ## Prefix Convention
 
-Words can contain almost any non-whitespace character. A colon ':' character is conventionally used to designate a prefix or namespace to keep related words organized, and to disambiguate similar or identical words that operator on different data types.
+Words can contain almost any non-whitespace character. A colon ':' character is conventionally used to designate a prefix or namespace to keep related words organized, and to disambiguate similar or identical words that operate on different data types. This is different from the leading colon (`:` sigil) that is used to define a global sequence.
 
-For example, the prefix "pin:" is used to organize all of the words that manipulate the GPIO pins.
+For example, the prefix "pin:" is used to organize and distinguish all of the words that manipulate the GPIO pins.
 
 ## Unu Comment Format
 
-Ok, I can't find a reference to this commenting convention now, but I think it was called "unu". Forth files that are read from the SD card are assumed to be in this format, which allows alternating comment and code sections. The document opens in 'comment' mode, ignoring lines until a line is encountered that contatins three tildes ~~~ in the first three columns. This is a signal to switch to the other mode.
+Ok, I can't find a reference to this commenting convention now, but I think it was called "unu". Forth files that are read from the SD card are assumed to be in this format, which allows alternating comment and code sections. The document opens in 'comment' mode, ignoring lines until a line is encountered that contains three tildes ~~~ in the first three columns. This is a signal to switch to the other mode.
 
 Each Forth file will therefore start with introductory comments, switch to some code, switch back to comments to introduce the next block of code, and so on.
 
@@ -103,7 +128,7 @@ mem:prt  Print memory stats to serial
 Initialize an array 'rainbow with low intensity rainbow colors 0..359
 ~~~
 :init-rainbow (-)
-	360 array identity 100 5 hsvr>
+	360 array identity 100 5 led:hsv>
 	!rainbow ;
 ~~~
 
@@ -123,38 +148,44 @@ A sigil is a single character prefix on a word that applies some action to the r
 
 `'string` pushes a string literal containing the characters of `string`
 
-`:word` starts a sequence definition where the sequence that follows will be defined globally as `word`. The sequence is terminated with the `;` sigil.
+`:word` starts a sequence definition where the sequence that follows will be defined globally as `word`. The sequence is terminated with the `;` word.
 
-`(anything` defines a comment. The entire word, terminated by whitespace, is ignored. This is typically used to define an input / output command in a sequence definition.
+`(anything` defines a comment. The entire word, terminated by whitespace, is ignored. This is typically used to define an input / output comment in a sequence definition.
 
 ```
 :num:dadd (ii-d)
 	+ 0.0 + ;
 ```
 
-The sequence `[ + 0.0 + ]` is defined with the word `num:dadd`. The comment indicates that two integer inputs are expected, and a single double output is returned.
+The sequence `[ + 0.0 + ]` is bound to the word `num:dadd`. The comment indicates that two integer inputs are expected, and a single double output is returned.
 
 ## Defining Words
 
-As you can see in the above and previous examples, new words can be defined in a couple of ways. The nicest is the colon shortcut used above. The colon sigil starts the definition of a new sequence, that sequence consisting of every word that follows until the ';' semicolon word is encountered to terminate the sequence definition. This is a shortcut to calling the existing words to declare and bind a sequence.
+As you can see in the above and previous examples, new words can be defined in a couple of ways. Perhaps the most readable is the colon shortcut used above. The colon sigil starts the definition of a new sequence, that sequence consisting of every word that follows until the ';' semicolon word is encountered to terminate the sequence definition.
 
 ```
 :thing1
 	* rot * + sqrt ;
-
-is equivalent to:
-
-[ * rot * + sqrt ] 'thing1 def
-
-but the first form seems more readable, and looks something like a function definition in other languages.
 ```
+is equivalent to:
+```
+[ * rot * + sqrt ] 'thing1 def
+```
+but the first form seems more readable, and looks something like a function definition in other languages.
+
 
 Note that the : sigil places the symbol to be bound at the beginning of the form, which is counter to everything else about the Forth language, as the implementation of that sigil must remember the word being defined and then use that word when the terminating semicolon is found. Thus function definitions are not reentrant, but that seems reasonable given the extremely simple structure of the language and data structures.
+
+# Built-In Words
+
+The following sections describe built-in words and their use.
+
+Where examples are given, they assume an empty stack, so all arguments required by the built-in words are shown. The result is shown to the right of '-->' as a stack with the top-of-stack to the right.
 
 ## Math Primitives
 
 ### + - * / mod
-These are unprefixed binary operators that expect two arguments and return one.
+These are binary operators that expect two arguments and return one.
 
 `1 2 + 3 +` --> `6`
 
@@ -166,7 +197,7 @@ Square a numeric input.
 ### sqrt
 Return the square root of a numeric input.
 
-`25 sq` --> `5.0`
+`25 sqrt` --> `5.0`
 
 ### constrain
 Constrain a numeric input to an inclusive range.
@@ -187,9 +218,11 @@ Convert an input in degrees to radians
 
 ### pow
 
-Raise X to the Yth power.
+Raise the first argument to the power of the second argument.
 
 `2 5 pow` --> `32`
+
+`5 2 pow` --> `25`
 
 ### abs
 
@@ -208,6 +241,9 @@ Return the rounded value, ceiling, or floor, of a single numeric input.
 ### dup
 
 Duplicate the top-of-stack.
+
+`1 2 dup` --> `1 2 2`
+
 
 ### over
 
@@ -231,39 +267,65 @@ Swaps the two top values on the stack.
 
 ### rot
 
-Rotates the top three values in the stack such that the previous top-of-stack is now third.
+Rotates the top three value in the stack such that the previous top-of-stack is now third.
+
+`1 2 3 rot` --> `3 1 2`
 
 ### rup
 
 Rotates the top three values on the stack in reverse of `rot`, such that the previously third item is now top.
 
+`1 2 3 rup` --> `2 3 1`
+
 ### rot4
 
 Same as `rot`, but applies to the top four items.
+
+`1 2 3 4 rot4` --> `4 1 2 3`
 
 ### rup4
 
 Same as `rup`, but applies to the top four items.
 
+`1 2 3 4 rup4` --> `2 3 4 1`
+
 ### rotn
 
 Same as `rot`, but takes an additional argument specifying how many stack elements to rotate.
+
+`1 2 3 4 5 2 rotn` --> `1 2 3 5 4`
+
+`1 2 3 4 5 3 rotn` --> `1 2 5 3 4`
+
+`1 2 3 4 5 5 rotn` --> `5 1 2 3 4`
 
 ### rupn
 
 Same as `rup`, but takes an additional argument specifying how many stack elements to rotate.
 
+`1 2 3 4 5 2 rupn ` --> `1 2 3 5 4`
+
+`1 2 3 4 5 3 rupn ` --> `1 2 4 5 3`
+
+`1 2 3 4 5 5 rupn ` --> `2 3 4 5 1`
+
 ### drop
 
 Drop the top-of-stack.
+
+`1 2 3 drop` --> `1 2`
 
 ### dup2
 
 Duplicate the top two elements of the stack.
 
+`1 2 dup2` --> `1 2 1 2`
+
 ### drop2
 
 Drop the top two elements of the stack.
+
+`1 2 3 4 drop2` --> `1 2`
 
 ### clst
 
@@ -281,13 +343,19 @@ Pop the top element of the stash stack, and push it onto the evaluation stack.
 
 Swap the entire contents of the evaluation stack and the stash stack.
 
+### clstash
+
+Clear the entire contents of the stash stack.
+
 ## Array of Integer operations
 
 Arrays of integer are a basic data type because manipulating color values for an array of RGB LEDs is one of the basic objectives for the language. Arrays of int are created with `array` and then can be manipulated directly using any basic operator such as + - * / and so on.
 
 Most numeric operators will check if their arguments are simple integer values or arrays, and will apply the operation across the entire array.
 
-`5 array identity 5 *` --> `(0,5,10,15,20)`
+`5 array identity` --> `(0,1,2,3,4)`
+
+`5 *` --> `(0,5,10,15,20)`
 
 `20 +` --> `(20,25,30,35,40)`
 
@@ -300,11 +368,13 @@ Return the sum of an array.
 
 ### array
 
-Create and push a new array of int.
+Create and push a new array of int. The size of the array is an input argument, and the returned array is initalized to zeros.
+
+`5 array` --> `(0,0,0,0,0)`
 
 ### identity
 
-Populate the array at TOS with an identity matrix.
+Populate the array at TOS with the index positions in the array.
 
 `10 array identity` --> `(0,1,2,3,4,5,6,7,8,9)`
 
@@ -314,15 +384,15 @@ Get or Put an element of an int array. The array is on the stack, and following 
 
 `5 array identity 2 100 puta` --> `(0,1,100,3,4)`
 
-`5 array identity 5 * 1 geta` --> `5 (0,5,10,15,20)`
+`5 array identity 5 * 1 geta` --> `(0,5,10,15,20) 5`
 
 ### dgeta dputa
 
 Get or Put an element of an int array, where the array is bound to a symbol in the global dictionary.
 
-`5 array !mydata`
+`5 array !mydata` --> `{mydata:(0,0,0,0,0)}`
 
-`'mydata 0 100 dputa` --> `mydata:(100,0,0,0,0)`
+`'mydata 0 100 dputa` --> `{mydata:(100,0,0,0,0)}`
 
 `'mydata 0 dgeta` --> `100`
 
@@ -330,13 +400,7 @@ Get or Put an element of an int array, where the array is bound to a symbol in t
 
 Return the size of an array. Does not consume the array from the stack.
 
-### map
-
-Execute a sequence for each element of an array, returning the result into the array.
-
-`5 array identity` --> `(0,1,2,3,4)`
-
-`[ 5 * 7 + ] map` --> `(7,12,17,22,27)`
+`3 array size` --> `(0,0,0) 3`
 
 ## Inequalities
 
@@ -404,7 +468,7 @@ Booleans are integers with value 0 (false) or non-zero (true).
 
 ## Conditionals and Looping
 
-Conditionals and looping use sequences to represent the conditional or repeated section of code. The sequence is pushed onto the stack and consumed by the operator.
+Conditionals and looping use sequences to hold the conditional or repeated sections of code. The sequences are pushed onto the stack and consumed by the operator.
 
 ### if
 
@@ -440,19 +504,51 @@ Repeat a sequence a given number of times. No arguments are passed into the sequ
 prints> hello hello hello hello hello
 ```
 
+### map
+
+Execute a sequence for each element of an array, returning the result into the array.
+
+`5 array identity` --> `(0,1,2,3,4)`
+
+`[ 5 * 7 + ] map` --> `(7,12,17,22,27)`
+
+Note that this last example is equivalent to `5 array identity 5 * 7 +`, because the `*` and `+` operators will implicitly apply themselves to each element of the array argument and return a new array. The `map` operator is more useful in cases where a function or some conditions are being applied to array elements, although many cases can be handled more efficiently by applying boolean logic to an array to produce another masking array populated with 1's and 0's and using multiplication to apply conditional math.
+
 ### call
 
 ## RGB Colors
 
-Three color models are supported so far: RGB, HSV, and HSV with a rainbow modifier to produce smoother yellows. I prefer the last, because the colors and saturation are the most pleasing, and the HSV model is so much more intuitive to work with for producing animations.
+Colors can be specified in three ways:
 
-All of the color support is oriented to WS2812 strips and similar products. The Octo library is used to render color values out to eight strings of LEDs simultaneously. The eight strings of equal length are attached to eight GPIO ports with TTL logic level conversion. The Octo library presents the eight strings as a single continuously addressable string.
+* as an integer, encoded as 0x00RRGGBB, regardless of the RGB ordering of the target LED string
+* as separate integers for red, green, and blue (RGB)
+* as separate integers for hue, saturation, and value (HSV
 
-For example, the MAP project consists of 2208 LEDs in eight strings of 276 LEDs each. Each string of 276 LEDs is formed of alternating strings of 35 LEDs (left-to-right) and 34 LEDs (right-to-left, on the offset). Four such pairs are connected in series to make a single strand, and eight strands make up the map, altogether approximately 35 LEDs wide and 64 rows tall.
+The last is the most intuitive for color animations and blends.
+
+Internally the FastLED library (http://fastled.io/) is being used for color management as well as pushing color data out to supported LED strings. The FastLED library uses C++ templates to optimize code targeted at specific LED types, pin numbers, and processor architectures. For this reason, each supported LED type and pin number must be coded in a switch statement, and there is some overhead to using templates to define all of those specific classes. Switches will be added to allow code size to be trimmed as necessary at the expense of flexibility.
+
+One option for attached LED strings is the OCTOWS2812 board. The Octo board outputs onto two CAT-6 cables with four pairs of (ground,signal) lines each to drive eight LED strings simultaneously. I have also built a similar board with TTL logic level output taken to solder pads on the board.
+
+Strings of LEDs can be connected to individual pins (three wire protocols) or pairs of pins (four wire protocols). There is also the special case of enabling a single Octo2812 board for eight strings at once. Each string attached (or eight strings via the Octo board) consumes one "slot" in the Forth library. There are 32 slots available, which should cover most use cases, but that can be modified easily through a #define. 
+
+The general pattern of use is to:
+
+1. initialize one or more strings of LEDs
+2. set pixel color values on the string(s)
+3. show the pixels
+
+Initializing a string creates a FastLED object and assigns it to one of the 32 available slots. Pixels are set by sending a color value to a pixel of a string, addressing the pixel by slot number and pixel number. Showing the LEDs will update all of the strings at once.
+
+Pixel values can also be set via fill and gradient operations.
+
+## North America Map Project
+
+An example project is the Drivewyze North America map. This project consists of 2208 LEDs in eight strings of 276 LEDs each. Each string of 276 LEDs is formed of alternating strings of 35 LEDs (left-to-right) and 34 LEDs (right-to-left, on the offset). Four such pairs are connected in series to make a single strand, and eight strands make up the map, altogether approximately 35 LEDs wide and 64 rows tall.
 
 This complicated arrangement of LEDs is wired to the Octo interface, and is then addressable as a flat array of 2208 pixels.
 
-The map has a supporting library (in Forth) that supports the addressing of pixels by an (x,y) coordinate system, and by (lat,long). For example, here is the Forth function that converts (lat,long) into (x,y) coordinates for the specific canvas North America map used in the project:
+The map has a supporting library (in Forth) that helps with the addressing of pixels by an (x,y) coordinate system, and by (lat,long). For example, here is the Forth function that converts (lat,long) into (x,y) coordinates for the specific canvas North America map used in the project:
 
 ```
 :map:xy (lat,long-x,y)
@@ -473,46 +569,244 @@ The map has a supporting library (in Forth) that supports the addressing of pixe
 	round ;
 ```
 
-Note that the first line of code takes the sin of the lat and long input values, and stores them in `map:` prefixed variables for use in the following two polynomials.
+Note that the first line of code takes the sin of the lat and long input values, and stores them in `map:` prefixed variables for use in the following two polynomials. The coefficients for this polynominal were determined by empirically lighting up a number of the LEDs and then reading the latitude and longitude off the map. The data (lat,long) and (x,y) of the LEDs were entered into a spreadsheet and fit.
 
-Colors in rgb or hsv format must be converted to a packed rgb format before being send to the Octo library or other libraries that manage the serial output of color data. The ordering of the red, green, and blue components may vary based on the hardware. This ordering is set with the `rgbformat` word.
+## Color Representations
 
-### rgbformat
+All of the following functions support mixed integer and array operands.
 
-Sets the format for packing RGB color values into an int.
+### led:hue>
 
-0: RGB
-1: GRB
-2: BGR
-3: GBR
-4: RBG
-5: BRG
+Convert a hue (int) to a packed int using saturation of 100 and value of 100, producing a bright a fully saturated pixel.
 
-### rgb>
+### led:huemed>
 
-Convert r, g, b values into a packed int.
+Convert a hue (int) to a packed int using saturation of 75 and value of 50, producing a mid-brightness mostly saturated pixel.
 
-### >rgb
+### led:huepale>
 
-Unpack an int into its r, g, b components.
+Convert a hue (int) to a packed int using saturation of 50 and value of 50, producing a mid-brightness pastel color.
 
-### hsv>
+### led:rgb>
 
-Convert h, s, v values into rgb and then a packed int. Hues are not corrected, so yellow occupies a narrow band and blue is quite wide.
+Convert r, g, b values into a packed int. Range of values is 0..100 for each.
 
-### hsvr>
+### led:hsv>
 
-Convert h, s, v values into a packed rgb int. Hues are corrected so each rainbow member occupies roughly an equal portion of the hue space.
+Convert h, s, v values into rgb and then a packed int. Hues are corrected so each rainbow member occupies roughly an equal portion of the hue space. Range of values is 0..359 for hue, and 0..100 for saturation and value.
 
-### blend
+### led:blend
 
 Mixes two packed RGB values using a ratio.
 
-`a b 75 blend` --> results in new color that is 25% a and 75% b.
+`0x778899 0xA58832 25 led:blend` --> results in new color that is 25% a and 75% b.
 
-### ablend
 
-Same as blend, but takes two arrays as input and mixes each corresponding pixel.
+### led:init\:ws2812
+
+```
+slot pin numleds led:init:ws2812
+```
+
+Initialize a string of WS2812 LEDs. `slot` is the slot (0..31) to use for the FastLED object. `pin` is the pin number and must be one of the pins coded for WS2812 use. `numleds` is the number of LEDs in the string.
+
+### led:init\:octo
+
+```
+slot numleds led:init:octo
+```
+
+Initialize eight strings of WS2812 LEDs, using an OCTOWS2812 board. `slot` is the slot (0..31) to use for the FastLED object. `numleds` is the number of LEDs in one of the strings.
+
+The octo board is commonly used with eight strings of the same length, but it can be used with varying lengths of strings, or less than eight strings. An addressable array of pixels is set aside assuming that all of the strings are of length `numleds`, so there are addressable pixels in the range 0 through (numleds*8)-1.
+
+If the strings are shorter or missing, then pixels will simply roll of the end. Each string is addressable starting at 0 (plus an offset of numleds for each string). For example, if strings of length 100, 50, and 25 are attached, then the LEDs will be addressable at pixels 0..99, 100..149, and 200..224. Colors can be set in other pixels, but they will run off the end of shorter strings harmlessly.
+
+Once the octo board is initalized in a slot, pixels are addressed continuously in that slot for all eight of the actual strings.
+
+### led:size
+
+Return the size of an initialized LED string, given the slot number.
+
+### led:order
+
+Set the RGB order of an initialized string.
+
+`slot order led:order`
+
+The order is specified as an integer:
+
+0: RGB
+1: RBG
+2: GBR
+3: GRB
+4: BRG
+5: BGR
+
+### led:setmap
+
+Sometimes, the order of pixels in a string (or set of strings in the Octo case) may not be an easy or natural pixel ordering for animations. For example, one might want to create a pixel numbering scheme that puts pixel 0 at the bottom-left of a matrix. Another example could be mis-wiring of strings attached to an Octo board. Another example might be strings that are laid out vertically in an up-and-down alternating arrangement, where the natural pixel ordering for animations should be consistently left-to-right.
+
+In cases such as these, functions can be written to translate the ideal pixel order for animations into the physical mapping. The function `led:setmap` takes this a step further by allowing a translation map to be built once at startup and asserted as the pixel translation for any pixel setting functions.
+
+Here is an example where the North America map was miswired. It is a lot easier to set a translation map than it is to desolder and correct the wiring error.
+
+```
+2208 array
+[
+	!idx
+	@idx @idx 828 + puta
+	@idx 276 + dup puta
+	@idx 552 + dup puta
+	@idx 828 + @idx puta
+	@idx 1104 + @idx 1932 + puta
+	@idx 1380 + dup puta
+	@idx 1656 + dup puta
+	@idx 1932 + @idx 1104 + puta
+] 0 276 loop
+0 swap led:setmap
+```
+
+The rows starting at indices 276, 552, 1380, and 1656 were wired correctly and map to themselves. Rows at index 0 and 828 are swapped, and rows at 1104 and 1932 are swapped.
+
+### led:show
+
+Show all of the slots.
+
+### led:c
+
+```
+slot index c led:c
+```
+
+Set an LED to a color in integer 0x00RRGGBB format. This function and all of those that follow refer to an individual LED by the slot to which the string is assigned, and the index of the LED(s) within the string.
+
+### led:hue
+
+```
+slot index hue led:hue
+```
+
+Set an LED to a color by hue in the range 0..359, with red at 0. The saturation and value are both set to 100%.
+
+### led:huemed
+
+```
+slot index hue led:huemed
+```
+
+Set an LED to a color by hue in the range 0..359, with red at 0. The saturation and value are both set to 75% and 50% respectively, resulting in a gentler version of the color.
+
+### led:huepale
+
+```
+slot index hue led:huepale
+```
+
+Set an LED to a color by hue in the range 0..359, with red at 0. The saturation and value are both set to 50%, resulting in a pastel color.
+
+### led:hsv
+
+```
+slot index hue sat val led:hsv
+```
+
+Set an LED to a color by hue (0..359), saturation (0..100), and value (0..100).
+
+### led:rgb
+
+```
+slot index red green blue led:rgb
+```
+
+Set an LED to a color by red (0..100), green (0..100), and blue (0..100).
+
+### led:fill\:c
+### led:fill\:hue
+### led:fill\:huemed
+### led:fill\:huepale
+### led:fill\:hsv
+### led:fill\:rgb
+
+```
+slot index count c led:fill:c
+slot index count hue led:fill:hue
+slot index count hue led:fill:huemed
+slot index count hue led:fill:huepale
+slot index count hue sat val led:fill:hsv
+slot index count red green blue led:fill:rgb
+```
+
+Set a range of LEDs to the same color value. These 'led:fill' functions use a starting index and count to specify the fill range. The color parameters are the same as for the corresponding pixel functions above.
+
+### led:grad\:c
+### led:grad\:hue
+### led:grad\:huemed
+### led:grad\:huepale
+### led:grad\:hsv
+### led:grad\:rgb
+
+```
+slot index count c1 c2 led:grad:c
+slot index count hue1 hue2 led:grad:hue
+slot index count hue1 hue2 led:grad:huemed
+slot index count hue1 hue2 led:grad:huepale
+slot index count hue1 sat1 val1 hue2 sat2 val2 led:grad:hsv
+slot index count red green blue led:grad:rgb
+```
+
+Set a range of LEDs to a gradient from one color value to another. These 'led:grad' functions use a starting index and count to specify the pixel range. The color parameters are the same as for the corresponding pixel functions above.
+
+
+
+### led:reada
+
+TODO
+
+```
+2208 array slot led:reada
+```
+
+Read the current LED array for a given slot into a provided int array. This is useful, for example, to animate a transition from whatever the current LED values are to a new set of values.
+
+### octo:dma-wait
+
+TODO
+
+When the octo library writes its internal array out to the LEDs, it uses memory buffers and DMA (direct memory access) to write the whole pixel array at 800 KHz. This operation takes some time, usually a few milliseconds, but the main processor is not required and control returns immediately to the running process.
+
+When writing a set of frames as an animation, it will produce unknown or unpredictable results if frames are written while the previous frame is still being rendered by the DMA process.
+
+`octo:dma-wait` will wait until the current DMA process is writing data, and will return as soon as the frame is complete. To get a maximum frame rate without overlapping frames, use `octo:dma-wait` just before writing a new frame of data, to make sure the previous frame has completed. This approach will optimize use of the main processor to prepare the next frame, and then render it as soon as possible (but no sooner).
+
+
+## Octo With 8xN Alpha Matrix
+
+One application of the Octo library is to drive eight matrices of LEDs that are each 8 rows by 32 columns. Stringing these together horizontally produces a single matrix that is 8 rows by 256 columns.
+
+These `alpha:` prefixed functions use a matrix like this to render alphanumeric characters using a 5x7 pixel ASCII character set.
+
+### alpha:at
+
+Render a string starting at a given column and using background and foreground colors.
+
+`'>>hello<< 0 150 100 10 hsv> 0 alpha:at`
+
+Renders ">>hello<<" with cyan foreground and black background, starting at column 0.
+
+### alpha:charat
+
+Render a single character at a given column and using background and foreground colors.
+
+### alpha:charcolat
+
+Write a single column of a character given the base column and offset. This can be used to vary the colors by column for a single character.
+
+### alpha:fontdata
+
+Return the font data for a single column of a given character.
+
+
 
 ## Dictionary Definitions
 
@@ -616,110 +910,6 @@ Delay the given number of microseconds.
 ### now
 
 Return the current ticks, which is milliseconds since the device started. The Teensy hardware does not have a real time clock, but ticks can be used to reliably calculate durations.
-
-## Octo WS2812 Controller
-
-The octo library has an internal buffer of color values that can be written on demand to the physical LED devices. One usual practice is to set a bunch of color values with octo:pixel, and then write the buffer to the LEDs with octo:show.
-
-Array operations can also be used to build and compute whole arrays of color values, and then write an array to the Octo library all at once.
-
-### octo:init
-
-Initialize the OctoWS2812 library. Requires two arguments: total LEDs, and LEDs per strip. The octo integration requires preallocated buffers for LED values, which are preset to a maximum of 1100 LEDs per strip (8800 LEDs total).
-
-Initalize the map project:
-
-`2208 276 octo:init`
-
-### octo:showa
-
-Write an array of int directly to the LED array. The values in the array will replace the current color values in the library.
-
-### octo:reada
-
-Read the current LED array into a given int array. This is useful, for example, to animate a transition from whatever the current LED values are to a new set of values.
-
-`2208 array octo:reada`
-
-### octo:pixel
-
-Write a single pixel value to the octo array.
-
-`150 100 10 hsv> 15 octo:pixel` --> write hsv (150,100,10) to pixel 15
-
-### octo:fill
-
-Fill a range of pixels with a color value.
-
-`150 100 10 hsv> 20 50 octo:fill` --> fill pixels 20..49 inclusive with a cyan color
-
-`0 0 100 octo:fill` --> clear first 100 pixels (0..99)
-
-### octo:show
-
-Write the Octo library's array of LED values to the physical LEDs. Note that `octo:pixel` and `octo:fill` and other calls that affect the internal array of color values will not render the array out to the physical LEDs. A separate call to `octo:show` is generally required.
-
-An exception is `octo:showa` which transfers an array of pixel values to the internal array, and then writes the internal array to the LEDs. That call assumes that a complete frame of color values is pre-calculated into an int array, and then copied to the LED strings.
-
-### octo:dma-wait
-
-When the octo library writes its internal array out to the LEDs, it uses memory buffers and DMA (direct memory access) to write the whole pixel array at 800 KHz. This operation takes some time, usually a few milliseconds, but the main processor is not required and control returns immediately to the running process.
-
-When writing a set of frames as an animation, it will produce unknown or unpredictable results if frames are written while the previous frame is still being rendered by the DMA process.
-
-`octo:dma-wait` will wait until the current DMA process is writing data, and will return as soon as the frame is complete. To get a maximum frame rate without overlapping frames, use `octo:dma-wait` just before writing a new frame of data, to make sure the previous frame has completed. This approach will optimize use of the main processor to prepare the next frame, and then render it as soon as possible (but no sooner).
-
-### octo:set-map
-
-Sometimes, the order of pixels in the Octo library may not be an easy or natural pixel ordering for animations. For example, one might want to create a pixel numbering scheme that puts pixel 0 at the bottom-left of a matrix. Another example could be mis-wiring of the eight strings such. Another example might be strings that are laid out vertically in an up-and-down alternating arrangement, where the natural pixel ordering for animations should be consistently left-to-right.
-
-In cases such as these, functions can be written to translate the ideal pixel order for animations into the physical mapping. The function `octo:set-map` takes this a step further by allowing a translation map to be built once at startup and asserted as the pixel translation for `octo:pixel` and other related functions.
-
-Here is an example where the North America map was miswired. It is a lot easier to set a translation map than it is to desolder and correct the wiring error.
-
-```
-2208 array
-[
-	!idx
-	@idx @idx 828 + puta
-	@idx 276 + dup puta
-	@idx 552 + dup puta
-	@idx 828 + @idx puta
-	@idx 1104 + @idx 1932 + puta
-	@idx 1380 + dup puta
-	@idx 1656 + dup puta
-	@idx 1932 + @idx 1104 + puta
-] 0 276 loop
-octo:set-map
-```
-
-The rows starting at indices 276, 552, 1380, and 1656 are correct and map to themselves. Rows at index 0 and 828 are swapped, and rows at 1104 and 1932 are swapped.
-
-## Octo With 8xN Alpha Matrix
-
-One application of the Octo library is to drive eight matrices of LEDs that are each 8 rows by 32 columns. Stringing these together horizontally produces a single matrix that is 8 rows by 256 columns.
-
-These `alpha:` prefixed functions use a matrix like this to render alphanumeric characters using a 5x7 pixel ASCII character set.
-
-### alpha:at
-
-Render a string starting at a given column and using background and foreground colors.
-
-`'>>hello<< 0 150 100 10 hsv> 0 alpha:at`
-
-Renders ">>hello<<" with cyan foreground and black background, starting at column 0.
-
-### alpha:charat
-
-Render a single character at a given column and using background and foreground colors.
-
-### alpha:charcolat
-
-Write a single column of a character given the base column and offset. This can be used to vary the colors by column for a single character.
-
-### alpha:fontdata
-
-Return the font data for a single column of a given character.
 
 ## Serial I/O
 

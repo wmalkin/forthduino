@@ -166,10 +166,19 @@ int* iadelete(int* ia);
 //Value* vaclone(const Value* va, int len);
 //Value* vadelete(Value* va, int len);
 
+// process implicit array arguments
+void unary(int(*oper)(int), double(*dbl_oper)(double));
+void binary(int(*oper)(int,int), double(*dbl_oper)(double,double));
+void ternary(int(*oper)(int,int,int), double(*dbl_oper)(double,double,double));
+
+
 void forth_init();
 void forth_run(const char* line);
 void forth_run(Value* v);
 void forth_unu(bool state);
+bool forth_getecho();
+void forth_setecho(bool echo);
+
 
 
 #endif /* forth_h */
